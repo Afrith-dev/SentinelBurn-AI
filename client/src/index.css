@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-space-950 text-slate-100 antialiased overflow-x-hidden;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Custom Sleek Aerospace Scrollbars */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #080d1a;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #1e293b;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #00f0ff;
+  }
+}
+
+@layer utilities {
+  .glass-panel {
+    background: rgba(14, 22, 38, 0.7);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .glass-panel-glow {
+    background: rgba(14, 22, 38, 0.85);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(0, 240, 255, 0.25);
+    box-shadow: 0 0 20px rgba(0, 240, 255, 0.1);
+  }
+
+  .text-glow-cyan {
+    text-shadow: 0 0 10px rgba(0, 240, 255, 0.6);
+  }
+
+  .text-glow-crimson {
+    text-shadow: 0 0 10px rgba(255, 51, 102, 0.7);
+  }
+
+  .text-glow-amber {
+    text-shadow: 0 0 10px rgba(255, 184, 0, 0.6);
+  }
+
+  .cyber-gradient {
+    background: linear-gradient(135deg, rgba(0, 240, 255, 0.15) 0%, rgba(59, 130, 246, 0.05) 100%);
+  }
+
+  .radar-sweep {
+    background: conic-gradient(from 0deg, transparent 0deg 330deg, rgba(0, 240, 255, 0.3) 360deg);
+  }
+}

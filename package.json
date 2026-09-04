@@ -1,0 +1,19 @@
+{
+  "name": "sentinelburn-ai",
+  "version": "1.0.0",
+  "description": "AI-Driven Anomaly Detection in Component Burn-In & Screening (SIH26170 / ISRO)",
+  "private": true,
+  "scripts": {
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "dev:ml": "cd ml-service && python app.py",
+    "dev:sim": "cd simulator && python telemetry_generator.py",
+    "dev": "concurrently -n \"SERVER,CLIENT,ML,SIM\" -c \"blue,green,magenta,yellow\" \"npm run dev:server\" \"npm run dev:client\" \"npm run dev:ml\" \"npm run dev:sim\"",
+    "build:client": "cd client && npm run build",
+    "build:server": "cd server && npm run build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

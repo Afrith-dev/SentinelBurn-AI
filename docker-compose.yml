@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  # TimescaleDB / PostgreSQL Time-Series Database
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: sentinelburn-db
+    environment:
+      POSTGRES_USER: sentinel
+      POSTGRES_PASSWORD: burnai_password_2026
+      POSTGRES_DB: sentinelburn
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # Redis for Background Queues
+  redis:
+    image: redis:7-alpine
+    container_name: sentinelburn-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  # MQTT Ingestion Bus
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: sentinelburn-mqtt
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    restart: unless-stopped
+
+  # Node.js / Express Backend
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: sentinelburn-server
+    environment:
+      PORT: 4000
+      JWT_SECRET: sentinelburn_aerospace_super_secure_jwt_secret_key_2026_sih
+      CLIENT_URL: http://localhost:5173
+      DATABASE_URL: postgres://sentinel:burnai_password_2026@timescaledb:5432/sentinelburn
+      REDIS_URL: redis://redis:6379
+      MQTT_BROKER_URL: mqtt://mosquitto:1883
+      ML_SERVICE_URL: http://ml-service:8000
+      SIMULATOR_URL: http://simulator:8001
+    ports:
+      - "4000:4000"
+    depends_on:
+      - timescaledb
+      - redis
+      - mosquitto
+    restart: unless-stopped
+
+  # Python FastAPI ML Microservice
+  ml-service:
+    build:
+      context: ./ml-service
+      dockerfile: Dockerfile
+    container_name: sentinelburn-ml
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  # Telemetry Simulator
+  simulator:
+    build:
+      context: ./simulator
+      dockerfile: Dockerfile
+    container_name: sentinelburn-simulator
+    ports:
+      - "8001:8001"
+    environment:
+      BACKEND_URL: http://server:4000/api/ingest/telemetry
+    restart: unless-stopped
+
+  # React / Vite Client
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: sentinelburn-client
+    ports:
+      - "5173:5173"
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  timescale_data:
