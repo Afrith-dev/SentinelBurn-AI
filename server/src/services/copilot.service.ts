@@ -3,19 +3,17 @@ import { AuditService } from './audit.service';
 import { MLService } from './ml.service';
 import { UserRole, Disposition } from '../types';
 import { v4 as uuidv4 } from 'uuid';
+import { ActionService, PendingAction } from './action.service';
+import { AnalysisService } from './analysis.service';
 
 export interface CopilotQueryRequest {
   query: string;
   runId?: string;
   userRole?: UserRole;
   userName?: string;
-  pendingConfirmation?: {
-    action: string;
-    runId: string;
-    deviceId: string;
-    decision: 'accept' | 'reject' | 'hold_fa';
-    reason?: string;
-  };
+  userId?: string;
+  sessionId?: string;
+  pendingActionId?: string;
 }
 
 export interface CopilotResponse {
@@ -24,13 +22,8 @@ export interface CopilotResponse {
   spokenText: string;
   navigationUrl?: string;
   requiresConfirmation?: boolean;
-  confirmationPayload?: {
-    action: string;
-    runId: string;
-    deviceId: string;
-    decision: 'accept' | 'reject' | 'hold_fa';
-    reason?: string;
-  };
+  confirmationPayload?: PendingAction;
+  actionResult?: any;
   data?: any;
 }
 
@@ -65,78 +58,85 @@ export class CopilotService {
     const activeRunId = req.runId || (Array.from(db.runs.keys())[0] || 'run-isro-live-001');
     const userRole = req.userRole || 'reliability_engineer';
     const userName = req.userName || 'Engineer';
+    const userId = req.userId || 'u-rel-01';
+    const sessionId = req.sessionId || userId;
 
     // ------------------------------------------------------------------------
     // 0. Safety-Critical Confirmation Flow
     // ------------------------------------------------------------------------
-    if (req.pendingConfirmation) {
-      const isAffirmative = /^(yes|confirm|proceed|affirmative|do it|execute|accept|approve)\b/i.test(query) ||
-                            query.includes('confirm') || query.includes('yes');
-      const isNegative = /^(no|cancel|abort|stop|negative|nevermind|don't)\b/i.test(query) ||
-                         query.includes('cancel') || query.includes('no');
-
-      if (isAffirmative) {
-        // Execute the pending action
-        const { runId, deviceId, decision } = req.pendingConfirmation;
-        const devKey = `${runId}:${deviceId}`;
-        const dev = db.devices.get(devKey);
-
-        if (!dev) {
-          return {
-            intent: 'CONFIRMATION_FAILED',
-            message: `Execution failed: Device ${deviceId} not found for run ${runId}.`,
-            spokenText: `Device ${deviceId} was not found.`
-          };
-        }
-
-        const disposition: Disposition = {
-          id: uuidv4(),
-          deviceId,
-          runId,
-          engineerId: 'u-copilot',
-          engineerName: `${userName} (via Voice Copilot)`,
-          decision,
-          comment: `Voice-authorized disposition: ${decision.toUpperCase()} on ${deviceId}`,
-          decidedAt: new Date().toISOString()
-        };
-
-        db.dispositions.set(deviceId, disposition);
-
-        // Record into SHA-256 Audit Trail
-        AuditService.logEvent({
-          runId,
-          eventType: 'VOICE_ENGINEER_DISPOSITION',
-          actorName: `${userName} (Voice Copilot)`,
-          fromState: 'FLAGGED_ANOMALY',
-          toState: decision.toUpperCase(),
-          payload: {
-            deviceId,
-            decision,
-            voiceCommand: rawQuery
-          }
-        });
-
-        const decisionDisplay = decision === 'hold_fa' ? 'HOLD FOR FAILURE ANALYSIS' : decision.toUpperCase();
-        return {
-          intent: 'DISPOSITION_EXECUTED',
-          message: `Confirmed: DUT ${deviceId.replace('d-', '')} is now marked as [${decisionDisplay}]. The decision has been cryptographically signed into the SHA-256 flight audit ledger.`,
-          spokenText: `Confirmed. Device ${deviceId.replace('d-', '')} has been placed on ${decisionDisplay}, and recorded in the audit trail.`,
-          navigationUrl: `/runs/${runId}/devices/${deviceId}`,
-          data: { disposition }
-        };
-      } else if (isNegative) {
-        return {
-          intent: 'CONFIRMATION_CANCELLED',
-          message: `Action cancelled. No disposition was recorded for device ${req.pendingConfirmation.deviceId}.`,
-          spokenText: `Action cancelled. No changes were made.`
-        };
+    if (req.pendingActionId) {
+      if (ActionService.isAffirmative(rawQuery)) {
+        const result = ActionService.confirm(req.pendingActionId, userId, sessionId, userRole, userName);
+        return { intent: `ACTION_${result.status}`, message: result.message, spokenText: result.spokenText, navigationUrl: result.navigationUrl, data: result.data, actionResult: result };
       }
+      if (ActionService.isNegative(rawQuery)) {
+        const result = ActionService.cancel(req.pendingActionId, userId, sessionId);
+        return { intent: 'ACTION_CANCELLED', message: result.message, spokenText: result.spokenText, actionResult: result };
+      }
+      return { intent: 'ACTION_CONFIRMATION_REQUIRED', message: 'Please confirm or cancel the pending action before starting another action.', spokenText: 'Please confirm or cancel the pending action first.', requiresConfirmation: true, confirmationPayload: ActionService.getPending(req.pendingActionId) };
+    }
+
+    const analysisRequest = /\b(analy[sz]e|what is happening|what are you seeing|summary|summarize|monitor|monitoring|current screen|current run|running session|burn-in run|burn in run|any anomalies|which dut is in trouble)\b/i.test(query);
+    if (analysisRequest && !(query.includes('open') || query.includes('navigate') || query.includes('take me'))) {
+      const analysis = await AnalysisService.analyzeRun(activeRunId);
+      const run = analysis.run;
+      const anomalies = analysis.anomalies;
+      const critical = analysis.criticalDevices;
+      const highest = analysis.highestRiskDevice;
+      const statusText = run.available
+        ? `Run ${run.runId} is ${run.status}, with ${run.reportingDevices}/${run.totalDevices} devices reporting telemetry (${run.reportingCoverage}% coverage).`
+        : run.message;
+      const anomalyText = anomalies.length
+        ? `I found ${anomalies.length} devices at or above the warning threshold. ${critical.length ? `${critical.length} are critical.` : 'None currently meet the critical threshold.'}`
+        : 'No elevated anomaly scores are currently available from the backend.';
+      const highestText = highest?.deviceId
+        ? `Highest current risk is ${highest.deviceId} at ${highest.scores?.ensembleScore ?? 'unavailable'} with ${highest.scores?.anomalyClassGuess || 'unknown'} classification.`
+        : '';
+      const trendText = analysis.trends.samples
+        ? `Across ${analysis.trends.samples} current device snapshots, temperature ranged from ${analysis.trends.min?.temperature ?? 'unavailable'} to ${analysis.trends.max?.temperature ?? 'unavailable'}, and leakage ranged from ${analysis.trends.min?.leakageCurrent ?? 'unavailable'} to ${analysis.trends.max?.leakageCurrent ?? 'unavailable'} mA.`
+        : 'No live telemetry samples are available for trend analysis.';
+      const recommendation = analysis.recommendation;
+      return {
+        intent: 'RUN_ANALYSIS',
+        message: `${statusText}\n\n${anomalyText} ${highestText}\n\n${trendText}\n\nEngineering recommendation: ${recommendation}`,
+        spokenText: `${statusText} ${anomalyText} ${highestText} Engineering recommendation: ${recommendation}`,
+        data: { ...analysis, monitoringRequested: /\bmonitor|monitoring\b/i.test(query) }
+      };
+    }
+
+    let actionDeviceId = ActionService.resolveDeviceReference(query, sessionId) || this.extractDeviceId(query) || undefined;
+    if (!actionDeviceId && query.includes('most critical')) {
+      const deviceIds = db.runDevices.get(activeRunId) || [];
+      actionDeviceId = deviceIds
+        .map((deviceId) => ({ deviceId, score: db.devices.get(`${activeRunId}:${deviceId}`)?.latestScores?.ensembleScore || 0 }))
+        .sort((a, b) => b.score - a.score)[0]?.deviceId;
+    }
+    const isOpenRequest = /\b(open|show me|take me to|navigate|display)\b/i.test(query);
+    const isFetchRequest = /\b(fetch|get detailed|retrieve|load)\b/i.test(query);
+    if (isOpenRequest || isFetchRequest) {
+      let action = 'OPEN_DEVICE';
+      if (query.includes('alert')) action = 'OPEN_ALERTS';
+      else if ((query.includes('critical') || query.includes('anomal')) && !actionDeviceId) action = 'OPEN_CRITICAL_DEVICES';
+      else if (query.includes('report') || query.includes('qualification')) action = 'OPEN_REPORT';
+      else if (query.includes('run') && !actionDeviceId) action = 'OPEN_RUN';
+      else if (query.includes('telemetry')) action = isFetchRequest ? 'FETCH_TELEMETRY' : 'OPEN_TELEMETRY';
+      else if (query.includes('shap')) action = 'OPEN_SHAP';
+      else if (query.includes('anomaly') || query.includes('explanation')) action = 'OPEN_ANOMALY';
+      else if (isFetchRequest) action = 'FETCH_DEVICE_DETAILS';
+
+      const args = { runId: activeRunId, deviceId: actionDeviceId };
+      if (['OPEN_DEVICE', 'OPEN_TELEMETRY', 'OPEN_ANOMALY', 'OPEN_SHAP', 'FETCH_DEVICE_DETAILS', 'FETCH_TELEMETRY'].includes(action) && !actionDeviceId) {
+        return { intent: 'ACTION_NEEDS_TARGET', message: 'Which device should I open or fetch?', spokenText: 'Which device should I open or fetch?' };
+      }
+      const pending = ActionService.createPending({ action, args, userId, sessionId });
+      if ('error' in pending) return { intent: 'ACTION_FAILED', message: pending.error, spokenText: pending.error };
+      return { intent: 'ACTION_CONFIRMATION_REQUIRED', message: `${pending.description} Would you like me to proceed?`, spokenText: `${pending.description} Would you like me to proceed?`, requiresConfirmation: true, confirmationPayload: pending };
     }
 
     // ------------------------------------------------------------------------
     // 1. Action: Put on Hold / Reject / Accept Device
     // ------------------------------------------------------------------------
-    if (query.includes('hold') || query.includes('reject') || query.includes('accept')) {
+    if (query.includes('hold') || query.includes('reject') || query.includes('accept') || query.includes('failed') || query.includes('passed') || query.includes('quarantine')) {
       const targetDevId = this.extractDeviceId(query);
       if (!targetDevId) {
         return {
@@ -147,18 +147,9 @@ export class CopilotService {
       }
 
       let decision: 'accept' | 'reject' | 'hold_fa' = 'hold_fa';
-      if (query.includes('reject')) decision = 'reject';
-      else if (query.includes('accept')) decision = 'accept';
+      if (query.includes('reject') || query.includes('failed')) decision = 'reject';
+      else if (query.includes('accept') || query.includes('passed')) decision = 'accept';
       else if (query.includes('hold')) decision = 'hold_fa';
-
-      // RBAC Validation
-      if (userRole === 'operator') {
-        return {
-          intent: 'RBAC_DENIED',
-          message: `Access Denied: Floor Operators cannot execute component dispositions. This action requires a Reliability Lead, QA Director, or FA Engineer per ISRO-PAS-206.`,
-          spokenText: `Access denied. Operators cannot execute device dispositions. Please escalate to a Reliability Engineer.`
-        };
-      }
 
       // Check device details
       const devKey = `${activeRunId}:${targetDevId}`;
@@ -169,18 +160,14 @@ export class CopilotService {
       const decisionName = decision === 'hold_fa' ? 'HOLD FOR FAILURE ANALYSIS' : decision.toUpperCase();
       const promptText = `DUT ${targetDevId.replace('d-', '')} has an Anomaly Confidence Score of ${score}% with ${signature.replace('_', ' ')}. Placing this component on ${decisionName} will be immutably recorded in the SHA-256 audit ledger. Do you want to confirm?`;
 
+      const pending = ActionService.createPending({ action: 'DISPOSITION', args: { runId: activeRunId, deviceId: targetDevId, decision }, userId, sessionId, userRole, userName });
+      if ('error' in pending) return { intent: 'ACTION_FAILED', message: pending.error, spokenText: pending.error };
       return {
         intent: 'ACTION_CONFIRMATION_REQUIRED',
         message: promptText,
         spokenText: promptText,
         requiresConfirmation: true,
-        navigationUrl: `/runs/${activeRunId}/devices/${targetDevId}`,
-        confirmationPayload: {
-          action: 'DISPOSITION',
-          runId: activeRunId,
-          deviceId: targetDevId,
-          decision
-        }
+        confirmationPayload: pending
       };
     }
 
@@ -301,6 +288,8 @@ export class CopilotService {
           spokenText: `All monitored components are currently nominal. No critical devices detected.`
         };
       }
+
+      ActionService.rememberResult(sessionId, activeRunId, [...criticals, ...warnings].map((item) => item.id));
 
       const critText = criticals.map(c => `DUT ${c.id.replace('d-', '')} (${c.score}%, ${c.type.replace('_', ' ')})`).join(', ');
       const warnText = warnings.map(w => `DUT ${w.id.replace('d-', '')} (${w.score}%)`).join(', ');

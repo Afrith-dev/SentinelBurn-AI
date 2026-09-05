@@ -1,0 +1,38 @@
+services:
+  # ─────────────────────────────────────────────────────────────────
+  # Backend API — Node.js / Express / Socket.IO
+  # ─────────────────────────────────────────────────────────────────
+  - type: web
+    name: sentinelburn-backend
+    runtime: node
+    rootDir: server
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: JWT_SECRET
+        sync: false          # Set manually in Render dashboard
+      - key: CLIENT_URL
+        sync: false          # Set to your Vercel frontend URL
+      - key: ML_SERVICE_URL
+        sync: false          # Set to sentinelburn-ml Render service URL
+      - key: SIMULATOR_URL
+        value: http://localhost:8001
+
+  # ─────────────────────────────────────────────────────────────────
+  # ML Core Microservice — Python / FastAPI / Uvicorn
+  # ─────────────────────────────────────────────────────────────────
+  - type: web
+    name: sentinelburn-ml
+    runtime: python
+    rootDir: ml-service
+    buildCommand: pip install -r requirements.txt
+    startCommand: python app.py
+    plan: free
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0

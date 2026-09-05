@@ -67,7 +67,9 @@ export const simulatorApi = {
 };
 
 export const copilotApi = {
-  query: (data: { query?: string; runId?: string; pendingConfirmation?: any }) =>
+  query: (data: { query?: string; runId?: string; pendingActionId?: string; sessionId?: string }) =>
     api.post('/copilot/query', data).then(r => r.data),
+  getGeminiStatus: () => api.get('/copilot/gemini/status').then(r => r.data),
+  testGemini: (prompt: string) => api.post('/copilot/gemini/test', { prompt }).then(r => r.data),
 };
 

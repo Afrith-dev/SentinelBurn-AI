@@ -159,16 +159,19 @@ export const DemoModeModal: React.FC<DemoModeModalProps> = ({ isOpen, onClose })
 
         case 7:
           log('🔒 Disposition [HOLD FOR FAILURE ANALYSIS] signed by Voice Copilot.');
-          await copilotApi.query({
-            query: 'CONFIRM',
+          const actionPreview = await copilotApi.query({
+            query: 'Put DUT-014 on hold for failure analysis',
             runId: activeRunId,
-            pendingConfirmation: {
-              action: 'DISPOSITION',
+            sessionId: 'demo-mode'
+          }).catch(() => null);
+          if (actionPreview?.confirmationPayload?.actionId) {
+            await copilotApi.query({
+              query: 'Confirm',
               runId: activeRunId,
-              deviceId: 'd-0014',
-              decision: 'hold_fa'
-            }
-          }).catch(() => {});
+              pendingActionId: actionPreview.confirmationPayload.actionId,
+              sessionId: 'demo-mode'
+            }).catch(() => {});
+          }
           break;
 
         case 8:
