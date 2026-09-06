@@ -60,6 +60,9 @@ app.use('/api', copilotRouter);
 app.use('/api', adminRouter);
 app.use('/api', operatorRouter);
 
+import { db } from './database/store';
+import { SimulatorService } from './services/simulator.service';
+
 // Start server
 httpServer.listen(ENV.PORT, () => {
   console.log('================================================================');
@@ -67,4 +70,10 @@ httpServer.listen(ENV.PORT, () => {
   console.log(`📡  Socket.IO real-time ingestion bus initialized`);
   console.log(`🔒  Cryptographic SHA-256 Audit Trail active`);
   console.log('================================================================');
+
+  // Auto-start default run simulation
+  const defaultRun = db.runs.get('run-default-01');
+  if (defaultRun && defaultRun.status === 'running') {
+    SimulatorService.startRun('run-default-01');
+  }
 });

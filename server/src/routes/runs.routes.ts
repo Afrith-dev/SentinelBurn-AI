@@ -7,6 +7,7 @@ import { SocketHandler } from '../socket/socketHandler';
 import { ENV } from '../config/env';
 import { Lot, Run, Device } from '../types';
 import { v4 as uuidv4 } from 'uuid';
+import { SimulatorService } from '../services/simulator.service';
 
 export const runsRouter = Router();
 
@@ -121,6 +122,11 @@ runsRouter.get('/runs/:id', authenticateToken, (req: AuthRequest, res: Response)
     return res.status(404).json({ error: 'Run not found' });
   }
 
+  // Ensure telemetry stream is active if run is in running state
+  if (run.status === 'running') {
+    SimulatorService.startRun(run.id);
+  }
+
   const lot = run.lotId ? db.lots.get(run.lotId) : undefined;
   const deviceIds = db.runDevices.get(run.id) || [];
   const alertCount = Array.from(db.alerts.values()).filter(a => a.runId === run.id).length;
@@ -153,7 +159,10 @@ runsRouter.post('/runs/:id/start', authenticateToken, async (req: AuthRequest, r
 
   SocketHandler.broadcastRunStatusChanged(run.id, { runId: run.id, status: 'running' });
 
-  // Instruct simulator service to start generation
+  // Start internal in-process telemetry simulator engine
+  SimulatorService.startRun(run.id);
+
+  // Also notify external simulator if configured
   try {
     const devCount = db.runDevices.get(run.id)?.length || 200;
     await axios.post(`${ENV.SIMULATOR_URL}/simulator/start`, {
@@ -162,9 +171,9 @@ runsRouter.post('/runs/:id/start', authenticateToken, async (req: AuthRequest, r
       anomalyRate: run.anomalyInjectionConfig?.anomalyRate || 0.05,
       speedMultiplier: run.speedMultiplier,
       backendUrl: `http://localhost:${ENV.PORT}/api/ingest/telemetry`
-    }, { timeout: 2000 });
+    }, { timeout: 1000 });
   } catch (e) {
-    // Simulator might be running locally or externally
+    // External simulator not available, in-process engine is active
   }
 
   res.json({ status: 'running', run });
@@ -188,6 +197,12 @@ runsRouter.post('/runs/:id/pause', authenticateToken, async (req: AuthRequest, r
   });
 
   SocketHandler.broadcastRunStatusChanged(run.id, { runId: run.id, status: newStatus });
+
+  if (newStatus === 'paused') {
+    SimulatorService.pauseRun(run.id);
+  } else {
+    SimulatorService.startRun(run.id);
+  }
 
   try {
     await axios.post(`${ENV.SIMULATOR_URL}/simulator/pause`, {}, { timeout: 1000 });
@@ -215,6 +230,7 @@ runsRouter.post('/runs/:id/complete', authenticateToken, async (req: AuthRequest
   });
 
   SocketHandler.broadcastRunStatusChanged(run.id, { runId: run.id, status: 'completed' });
+  SimulatorService.stopRun(run.id);
 
   try {
     await axios.post(`${ENV.SIMULATOR_URL}/simulator/stop`, {}, { timeout: 1000 });
