@@ -20,10 +20,34 @@ export const authenticateToken = (req: AuthRequest, res: Response, next: NextFun
     // For seamless local testing, allow demo requests with default mock user if no auth header passed
     req.user = {
       id: 'u-rel-01',
-      name: 'K. Radhakrishnan (Reliability Lead)',
+      name: 'Dr. Afrith (Reliability Lead)',
       email: 'engineer@sentinelburn.aero',
       role: 'reliability_engineer'
     };
+    return next();
+  }
+
+  // Handle demo / offline mock tokens (format: "mock-token-<role>" or "google-oauth-mock-token")
+  if (token.startsWith('mock-token-') || token === 'google-oauth-mock-token') {
+    const roleStr = token === 'google-oauth-mock-token'
+      ? 'reliability_engineer'
+      : token.replace('mock-token-', '');
+
+    const allowedRoles: UserRole[] = ['admin', 'qa_manager', 'reliability_engineer', 'operator', 'fa_engineer'];
+    const role: UserRole = allowedRoles.includes(roleStr as UserRole)
+      ? (roleStr as UserRole)
+      : 'reliability_engineer';
+
+    const demoNames: Record<UserRole, { id: string; name: string; email: string }> = {
+      admin:                 { id: 'u-admin-01', name: 'Dr. Mohamed',              email: 'admin@sentinelburn.aero' },
+      reliability_engineer:  { id: 'u-rel-01',   name: 'Dr. Afrith',               email: 'engineer@sentinelburn.aero' },
+      qa_manager:            { id: 'u-qa-01',    name: 'Dr. Selvi',                email: 'qa@sentinelburn.aero' },
+      operator:              { id: 'u-op-01',    name: 'Floor Operator',           email: 'operator@sentinelburn.aero' },
+      fa_engineer:           { id: 'u-fa-01',    name: 'Dr. Balaji',               email: 'fa@sentinelburn.aero' },
+    };
+
+    const demo = demoNames[role];
+    req.user = { ...demo, role };
     return next();
   }
 

@@ -20,6 +20,10 @@ export const authApi = {
     api.post('/login', credentials).then(r => r.data),
   register: (data: any) =>
     api.post('/register', data).then(r => r.data),
+  loginGoogle: (payload: { credential?: string; email?: string; name?: string }) =>
+    api.post('/auth/google', payload).then(r => r.data),
+  getGoogleConfig: () =>
+    api.get('/auth/google/config').then(r => r.data),
   getProfile: () =>
     api.get('/me').then(r => r.data),
 };
@@ -44,6 +48,7 @@ export const devicesApi = {
   getExplanation: (runId: string, deviceId: string) => api.get(`/runs/${runId}/devices/${deviceId}/explain`).then(r => r.data),
   setDisposition: (deviceId: string, data: { runId: string; decision: string; comment?: string }) =>
     api.post(`/devices/${deviceId}/disposition`, data).then(r => r.data),
+  getHoldFADevices: () => api.get('/devices/hold-fa').then(r => r.data),
 };
 
 export const alertsApi = {
@@ -72,4 +77,17 @@ export const copilotApi = {
   getGeminiStatus: () => api.get('/copilot/gemini/status').then(r => r.data),
   testGemini: (prompt: string) => api.post('/copilot/gemini/test', { prompt }).then(r => r.data),
 };
+
+export const operatorApi = {
+  getShiftNotes: (runId: string) => api.get(`/operator/shift-notes/${runId}`).then(r => r.data),
+  saveShiftNote: (data: { runId: string; note: string; author?: string }) =>
+    api.post('/operator/shift-notes', data).then(r => r.data),
+};
+
+export const adminApi = {
+  getUsers: () => api.get('/admin/users').then(r => r.data),
+  deactivateUser: (id: string) => api.patch(`/admin/users/${id}/deactivate`).then(r => r.data),
+  getHealth: () => api.get('/health').then(r => r.data),
+};
+
 

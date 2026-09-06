@@ -35,7 +35,8 @@ Electronic components used in space and aerospace applications must undergo rigo
 - 👤 **Engineer Disposition** — Accept / Reject / Hold-FA decision workflow per device
 - 📋 **PDF Report Generation** — Qualification screening report with all flagged devices
 - 🔐 **SHA-256 Audit Chain** — Tamper-evident cryptographic audit trail for every state change
-- 🎙️ **Voice Copilot** — Natural language query interface for mission console
+- 🎙️ **SentinelVoice Copilot** — Real-time Gemini Live voice copilot configured with female prebuilt voice (`Aoede` / `Leda`), audio noise suppression, edge crossfade ramps, and **Live While Minimized** floating status pill.
+- 🔐 **Modern Authentication System** — Email/Password sign-in, user registration with password confirmation & validation, **Continue with Google** OAuth integration, secure `bcrypt` password hashing, and protected route guards.
 
 ### Bonus Features
 - 5 Anomaly Classes: Sudden Shift, Gradual Drift, Intermittent Spike, Cohort Outlier, Thermal Lag

@@ -5,6 +5,7 @@ export interface User {
   name: string;
   email: string;
   role: UserRole;
+  personaName?: string;  // e.g. "Dr. Afrith", "Dr. Selvi"
   lastLogin?: string;
 }
 

@@ -6,6 +6,7 @@ export interface User {
   email: string;
   passwordHash: string;
   role: UserRole;
+  deactivated?: boolean;
   lastLogin?: string;
   createdAt: string;
 }

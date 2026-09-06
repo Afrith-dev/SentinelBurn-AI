@@ -8,6 +8,7 @@ export interface GeminiLiveStatus {
   mode: 'gemini-live' | 'fallback';
   model: string;
   liveModel: string;
+  voiceName: string;
   message: string;
 }
 
@@ -32,6 +33,10 @@ export class GeminiLiveService {
 
   static getLiveModelName(): string {
     return process.env.GEMINI_LIVE_MODEL || 'gemini-3.1-flash-live-preview';
+  }
+
+  static getVoiceName(): string {
+    return process.env.GEMINI_VOICE_NAME || 'Leda';
   }
 
   static getSystemInstruction(): string {
@@ -226,6 +231,7 @@ export class GeminiLiveService {
         mode: 'fallback',
         model,
         liveModel,
+        voiceName: this.getVoiceName(),
         message: 'Gemini Live is not configured. Set GEMINI_API_KEY to enable the real-time voice assistant.'
       };
     }
@@ -235,6 +241,7 @@ export class GeminiLiveService {
       mode: 'gemini-live',
       model,
       liveModel,
+      voiceName: this.getVoiceName(),
       message: 'Gemini Live is configured and ready for live voice and tool-based telemetry responses.'
     };
   }
@@ -293,7 +300,12 @@ export class GeminiLiveService {
     return buffer;
   }
 
-  static extractAudioPayloadFromMessage(message: any): { buffer?: Buffer; mimeType?: string; text?: string } {
+  // Returns { pcmBase64, text } — raw signed-16-bit little-endian PCM at 24 kHz.
+  // We deliberately skip WAV-header wrapping here because the client's
+  // playGeminiAudio / pcm16ToFloat32 expects raw PCM bytes.  Wrapping the
+  // payload in a WAV header and then decoding it as raw PCM caused the loud
+  // noise burst (the 44-byte WAV header was treated as audio samples).
+  static extractAudioPayloadFromMessage(message: any): { pcmBase64?: string; text?: string } {
     const serverContent = message?.serverContent;
     const modelTurn = serverContent?.modelTurn ?? serverContent ?? {};
     const parts = modelTurn.parts ?? [];
@@ -315,16 +327,17 @@ export class GeminiLiveService {
 
     const base64 = String(audioInline.inlineData.data || '');
     const mimeType = String(audioInline.inlineData.mimeType || 'audio/L16');
-    const raw = Buffer.from(base64, 'base64');
-    const wav = mimeType.toLowerCase().includes('wav') || mimeType.toLowerCase().includes('wave')
-      ? raw
-      : this.pcmToWav(raw, 24000, 1, 16);
 
-    return {
-      buffer: wav,
-      mimeType: 'audio/wav',
-      text: textParts || undefined
-    };
+    // If Gemini already returned a WAV (unusual), strip the 44-byte header so
+    // we always hand raw PCM16 to the client.
+    if (mimeType.toLowerCase().includes('wav') || mimeType.toLowerCase().includes('wave')) {
+      const raw = Buffer.from(base64, 'base64');
+      const pcmOnly = raw.slice(44); // strip the standard 44-byte WAV header
+      return { pcmBase64: pcmOnly.toString('base64'), text: textParts || undefined };
+    }
+
+    // Already raw PCM — pass straight through.
+    return { pcmBase64: base64, text: textParts || undefined };
   }
 
   static async executeToolCall(functionCall: any, context?: { userId: string; sessionId: string; userRole?: any; userName?: string; socket?: any }): Promise<any> {
@@ -492,6 +505,13 @@ export class GeminiLiveService {
         model: liveModel,
         config: {
           responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName: this.getVoiceName(),
+              },
+            },
+          },
           inputAudioTranscription: { languageCodes: ['en-US'] },
           outputAudioTranscription: { languageCodes: ['en-US'] },
           systemInstruction: {
@@ -547,10 +567,11 @@ export class GeminiLiveService {
               socket?.emit('voice:transcript', { text: payload.text, source: 'gemini' });
             }
 
-            if (payload.buffer) {
+            // Send raw PCM16 base64 (no WAV header) so the client can decode
+            // it directly with pcm16ToFloat32 → AudioBuffer without noise.
+            if (payload.pcmBase64) {
               socket?.emit('voice:response', {
-                audioBase64: payload.buffer.toString('base64'),
-                mimeType: payload.mimeType,
+                audioBase64: payload.pcmBase64,
                 text: payload.text || '',
                 turnComplete,
                 interrupted

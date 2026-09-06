@@ -16,6 +16,7 @@ export class DataStore {
   alerts: Map<string, Alert> = new Map();
   dispositions: Map<string, Disposition> = new Map(); // key: deviceId
   auditLogs: RunAuditLogRow[] = [];
+  shiftNotes: Map<string, Array<{ id: string; runId: string; note: string; author: string; timestamp: string }>> = new Map(); // runId -> notes
 
   constructor() {
     this.ensureDataDir();
@@ -41,39 +42,39 @@ export class DataStore {
     const defaultUsers: Array<Omit<User, 'createdAt'>> = [
       {
         id: 'u-admin-01',
-        name: 'Dr. Vikram Sarabhai',
+        name: 'Dr. Mohamed',
         email: 'admin@sentinelburn.aero',
         passwordHash: hash,
         role: 'admin',
       },
       {
         id: 'u-rel-01',
-        name: 'K. Radhakrishnan (Reliability Lead)',
+        name: 'Dr. Afrith',
         email: 'engineer@sentinelburn.aero',
         passwordHash: hash,
         role: 'reliability_engineer',
       },
       {
         id: 'u-qa-01',
-        name: 'A. S. Kiran Kumar (QA Director)',
+        name: 'Dr. Selvi',
         email: 'qa@sentinelburn.aero',
         passwordHash: hash,
         role: 'qa_manager',
       },
       {
         id: 'u-op-01',
-        name: 'Floor Operator 04',
+        name: 'Floor Operator',
         email: 'operator@sentinelburn.aero',
         passwordHash: hash,
         role: 'operator',
       },
       {
         id: 'u-fa-01',
-        name: 'Dr. Tessy Thomas (Failure Analysis)',
+        name: 'Dr. Balaji',
         email: 'fa@sentinelburn.aero',
         passwordHash: hash,
         role: 'fa_engineer',
-      }
+      },
     ];
 
     for (const u of defaultUsers) {

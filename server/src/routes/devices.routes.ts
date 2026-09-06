@@ -9,6 +9,28 @@ import { v4 as uuidv4 } from 'uuid';
 
 export const devicesRouter = Router();
 
+// GET /api/devices/hold-fa - Get all devices marked as hold_fa across all runs
+devicesRouter.get('/devices/hold-fa', authenticateToken, (req: AuthRequest, res: Response) => {
+  const holdList: any[] = [];
+  db.dispositions.forEach((disp, devId) => {
+    if (disp.decision === 'hold_fa') {
+      let matchedDev: any = null;
+      for (const [, dev] of db.devices.entries()) {
+        if (dev.id === devId) {
+          matchedDev = dev;
+          break;
+        }
+      }
+      holdList.push({
+        id: devId,
+        device: matchedDev || { id: devId, deviceSerial: `DEV-${devId}` },
+        disposition: disp,
+      });
+    }
+  });
+  res.json(holdList);
+});
+
 devicesRouter.get('/runs/:id/devices', authenticateToken, (req: AuthRequest, res: Response) => {
   const runId = req.params.id;
   const deviceIds = db.runDevices.get(runId) || [];

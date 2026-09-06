@@ -16,6 +16,8 @@ import { modelsRouter } from './routes/models.routes';
 import { simulatorRouter } from './routes/simulator.routes';
 import { ingestRouter } from './routes/ingest.routes';
 import { copilotRouter } from './routes/copilot.routes';
+import { adminRouter } from './routes/admin.routes';
+import { operatorRouter } from './routes/operator.routes';
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -55,6 +57,8 @@ app.use('/api', modelsRouter);
 app.use('/api', simulatorRouter);
 app.use('/api', ingestRouter);
 app.use('/api', copilotRouter);
+app.use('/api', adminRouter);
+app.use('/api', operatorRouter);
 
 // Start server
 httpServer.listen(ENV.PORT, () => {

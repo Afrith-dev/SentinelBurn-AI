@@ -3,6 +3,8 @@ import path from 'path';
 
 // Load .env from workspace root or current directory
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '../.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 dotenv.config();
 
 export const ENV = {
@@ -17,6 +19,8 @@ export const ENV = {
   GEMINI_API_KEY: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '',
   GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
   GEMINI_LIVE_MODEL: process.env.GEMINI_LIVE_MODEL || 'gemini-3.1-flash-live-preview',
+  GEMINI_VOICE_NAME: process.env.GEMINI_VOICE_NAME || 'Aoede',
+  GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || '',
   SIM_DEFAULT_DEVICE_COUNT: parseInt(process.env.SIM_DEFAULT_DEVICE_COUNT || '200', 10),
   SIM_DEFAULT_ANOMALY_RATE: parseFloat(process.env.SIM_DEFAULT_ANOMALY_RATE || '0.05'),
   SIM_DEFAULT_SPEED_MULTIPLIER: parseFloat(process.env.SIM_DEFAULT_SPEED_MULTIPLIER || '60.0'),
